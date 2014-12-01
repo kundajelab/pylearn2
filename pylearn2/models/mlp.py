@@ -2955,7 +2955,7 @@ class ConvElemwise(Layer):
                                 "ConvElemwise.")
         # need to put in del statements to avoid including these when
         # self.__dict__.update(locals()) is called later.
-        del mutuall_exclusive_init_vars
+        del mutually_exclusive_init_vars
         del total_not_none
 
         if pool_type is not None:
@@ -3378,6 +3378,9 @@ class ConvRectifiedLinear(ConvElemwise):
 
     kernel_stride : tuple
         The stride of the convolution kernel. A two-tuple of ints.
+
+    init_weights : numpy arr
+        If specified, weight vector will be initialised using this.
     """
 
     def __init__(self,
@@ -3400,18 +3403,21 @@ class ConvRectifiedLinear(ConvElemwise):
                  detector_normalization=None,
                  output_normalization=None,
                  kernel_stride=(1, 1),
-                 monitor_style="classification"):
+                 monitor_style="classification",
+                 init_weights=None):
 
         nonlinearity = RectifierConvNonlinearity(left_slope)
 
-        if (irange is None) and (sparse_init is None):
-            raise AssertionError("You should specify either irange or "
-                                 "sparse_init when calling the constructor of "
-                                 "ConvRectifiedLinear.")
-        elif (irange is not None) and (sparse_init is not None):
-            raise AssertionError("You should specify either irange or "
-                                 "sparse_init when calling the constructor of "
-                                 "ConvRectifiedLinear and not both.")
+        # pretty sure the checks below are done as part of ConvElemwise,
+        #so I am removing them from here.
+        #if (irange is None) and (sparse_init is None):
+        #    raise AssertionError("You should specify either irange or "
+        #                         "sparse_init when calling the constructor of "
+        #                         "ConvRectifiedLinear.")
+        #elif (irange is not None) and (sparse_init is not None):
+        #    raise AssertionError("You should specify either irange or "
+        #                         "sparse_init when calling the constructor of "
+        #                         "ConvRectifiedLinear and not both.")
 
         # Alias the variables for pep8
         mkn = max_kernel_norm
@@ -3437,7 +3443,8 @@ class ConvRectifiedLinear(ConvElemwise):
                                                   detector_normalization=dn,
                                                   output_normalization=on,
                                                   kernel_stride=kernel_stride,
-                                                  monitor_style=monitor_style)
+                                                  monitor_style=monitor_style,
+                                                  init_weights=init_weights)
 
 
 def max_pool(bc01, pool_shape, pool_stride, image_shape):

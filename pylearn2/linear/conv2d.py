@@ -341,7 +341,7 @@ def make_conv2D_with_weights(init_weights
     init_weights : 4-tensor of shape (out channels, in channels, rows, cols)
     """
 
-    W = shared(init_weights);
+    W = sharedX(init_weights);
 
     return Conv2D(
         filters=W,
