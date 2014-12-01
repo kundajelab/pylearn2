@@ -324,3 +324,30 @@ def make_sparse_random_conv2D(num_nonzero, input_space, output_space,
         subsample=subsample, border_mode=border_mode,
         filters_shape=W.get_value(borrow=True).shape, message=message
     )
+
+def make_conv2D_with_weights(init_weights
+                            , input_space
+                            , output_space
+                            , batch_size=None
+                            , subsample=(1, 1)
+                            , border_mode='valid'
+                            , message=""
+                            , rng=None):
+    """
+    Creates a Conv2D with the weights specified in init_weights
+
+    Parameters
+    ----------
+    init_weights : 4-tensor of shape (out channels, in channels, rows, cols)
+    """
+
+    W = shared(init_weights);
+
+    return Conv2D(
+        filters=W,
+        batch_size=batch_size,
+        input_space=input_space,
+        output_axes=output_space.axes,
+        subsample=subsample, border_mode=border_mode,
+        filters_shape=W.get_value(borrow=True).shape, message=message
+    )

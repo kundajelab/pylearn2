@@ -2934,17 +2934,29 @@ class ConvElemwise(Layer):
                  detector_normalization=None,
                  output_normalization=None,
                  kernel_stride=(1, 1),
-                 monitor_style="classification"):
+                 monitor_style="classification",
+                 init_weights=None):
         super(ConvElemwise, self).__init__()
 
-        if (irange is None) and (sparse_init is None):
+        if (irange is None) and (sparse_init is None) and (init_weights is None):
             raise AssertionError("You should specify either irange or "
-                                 "sparse_init when calling the constructor of "
+                                 "sparse_init or init_weights "
+                                 "when calling the constructor of "
                                  "ConvElemwise.")
-        elif (irange is not None) and (sparse_init is not None):
-            raise AssertionError("You should specify either irange or "
-                                 "sparse_init when calling the constructor of "
-                                 "ConvElemwise and not both.")
+        mutually_exclusive_init_vars = [ [irange,'irange']
+                                        ,[sparse_init,'sparse_init']
+                                        ,[init_weights,'init_weights']]
+        total_not_none = sum([1 if (x[0] is not None) else 0 \
+                            for x in mutually_exclusive_init_vars]);
+        if (total_not_none > 1):
+            raise AssertionError("Only one of "
+                                +",".join([x[1] for x in mutually_exclusive_init_vars])
+                                +" can be specified when calling the constructor of "
+                                "ConvElemwise.")
+        # need to put in del statements to avoid including these when
+        # self.__dict__.update(locals()) is called later.
+        del mutuall_exclusive_init_vars
+        del total_not_none
 
         if pool_type is not None:
             assert pool_shape is not None, (
@@ -2992,6 +3004,16 @@ class ConvElemwise(Layer):
                 subsample=self.kernel_stride,
                 border_mode=self.border_mode,
                 rng=rng)
+        elif self.init_weights is not None:
+            self.transformer = conv2d.make_conv2D_with_weights(
+                init_weights=self.init_weights
+                ,input_space=self.input_space
+                ,output_space=self.detector_space
+                ,subsample=self.kernel_stride
+                ,border_mode=self.border_mode)    
+        else:
+            raise AssertionError("Conditions for initialisation"
+                "of ConvElemWise were not satisfied"); 
 
     def initialize_output_space(self):
         """
