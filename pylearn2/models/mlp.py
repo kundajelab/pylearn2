@@ -3029,7 +3029,6 @@ class ConvElemwise(Layer):
             sharedX(self.detector_space.get_origin_batch(dummy_batch_size))
 
         if self.pool_type is not None:
-            assert self.pool_type in ['max', 'mean']
             if self.pool_type == 'max':
                 dummy_p = max_pool(bc01=dummy_detector,
                                    pool_shape=self.pool_shape,
@@ -3040,6 +3039,13 @@ class ConvElemwise(Layer):
                                     pool_shape=self.pool_shape,
                                     pool_stride=self.pool_stride,
                                     image_shape=self.detector_space.shape)
+            elif self.pool_type == 'sum':
+                dummy_p = sum_pool(bc01=dummy_detector,
+                                    pool_shape=self.pool_shape,
+                                    pool_stride=self.pool_stride,
+                                    image_shape=self.detector_space.shape)
+            else:
+                raise RuntimeError("Unsupported pool type: "+self.pool_type);
             dummy_p = dummy_p.eval()
             self.output_space = Conv2DSpace(shape=[dummy_p.shape[2],
                                                    dummy_p.shape[3]],
@@ -3251,10 +3257,6 @@ class ConvElemwise(Layer):
             if self.detector_normalization:
                 d = self.detector_normalization(d)
 
-            assert self.pool_type in ['max', 'mean'], ("pool_type should be"
-                                                       "either max or mean"
-                                                       "pooling.")
-
             if self.pool_type == 'max':
                 p = max_pool(bc01=d, pool_shape=self.pool_shape,
                              pool_stride=self.pool_stride,
@@ -3263,6 +3265,12 @@ class ConvElemwise(Layer):
                 p = mean_pool(bc01=d, pool_shape=self.pool_shape,
                               pool_stride=self.pool_stride,
                               image_shape=self.detector_space.shape)
+            elif self.pool_type == 'sum':
+                p = sum_pool(bc01=d, pool_shape=self.pool_shape, 
+                              pool_stride=self.pool_stride, 
+                              image_shape=self.detector_space.shape) 
+            else:
+                raise RuntimeError("Unsupported pool type: "+self.pool_type);
 
             self.output_space.validate(p)
         else:
@@ -3615,7 +3623,7 @@ def max_pool_c01b(c01b, pool_shape, pool_stride, image_shape):
                             required_r,
                             required_c,
                             c01b.shape[3])
-
+    wide_infinity = T.cast(wide_infinity,'float64');
     name = c01b.name
     if name is None:
         name = 'anon_bc01'
@@ -3645,6 +3653,121 @@ def max_pool_c01b(c01b, pool_shape, pool_stride, image_shape):
         assert isfinite(mxv)
 
     return mx
+
+def sum_pool(bc01, pool_shape, pool_stride, image_shape):
+    """
+    Does summation via a Theano graph.
+
+    Parameters
+    ----------
+    bc01 : theano tensor
+        minibatch in format (batch size, channels, rows, cols)
+    pool_shape : tuple
+        shape of the pool region (rows, cols)
+    pool_stride : tuple
+        strides between pooling regions (row stride, col stride)
+    image_shape : tuple
+        (rows, cols) tuple to avoid doing some arithmetic in theano
+
+    Returns
+    -------
+    pooled : theano tensor
+        The output of pooling applied to `bc01`
+
+    See Also
+    --------
+    max_pool : Same thing but with max pooling
+
+    Examples
+    --------
+    >>> import theano
+    >>> import theano.tensor as T
+    >>> from pylearn2.models.mlp import mean_pool
+    >>> import numpy as np
+    >>> t = np.array([[1, 1, 3, 3],
+    ...               [1, 1, 3, 3],
+    ...               [5, 5, 7, 7],
+    ...               [5, 5, 7, 7],
+    ...               [9, 9, 11, 11],
+    ...               [9, 9, 11, 11]])
+
+    >>> X = np.zeros((3, t.shape[0], t.shape[1]))
+    >>> X[:] = t
+    >>> X = X[np.newaxis]
+    >>> X_sym = T.tensor4('X')
+    >>> pool_it = sum_pool(X_sym, pool_shape=(2, 2), pool_stride=(2, 2),
+    ...                     image_shape=(6, 4))
+    >>> f = theano.function(inputs=[X_sym], outputs=pool_it)
+
+    This will pool over over windows of size (2, 2) while also stepping by this
+    same amount, shrinking the examples input to [[1, 3], [5, 7], [9, 11]].
+    """
+    mx = None
+    r, c = image_shape
+    pr, pc = pool_shape
+    rs, cs = pool_stride
+
+    # Compute index in pooled space of last needed pool
+    # (needed = each input pixel must appear in at least one pool)
+    def last_pool(im_shp, p_shp, p_strd):
+        rval = int(np.ceil(float(im_shp - p_shp) / p_strd))
+        assert p_strd * rval + p_shp >= im_shp
+        assert p_strd * (rval - 1) + p_shp < im_shp
+        return rval
+    # Compute starting row of the last pool
+    last_pool_r = last_pool(image_shape[0],
+                            pool_shape[0],
+                            pool_stride[0]) * pool_stride[0]
+    # Compute number of rows needed in image for all indexes to work out
+    required_r = last_pool_r + pr
+
+    last_pool_c = last_pool(image_shape[1],
+                            pool_shape[1],
+                            pool_stride[1]) * pool_stride[1]
+    required_c = last_pool_c + pc
+
+    for bc01v in get_debug_values(bc01):
+        assert not contains_inf(bc01v)
+        assert bc01v.shape[2] == image_shape[0]
+        assert bc01v.shape[3] == image_shape[1]
+
+    wide_infinity = T.alloc(0,
+                            bc01.shape[0],
+                            bc01.shape[1],
+                            required_r,
+                            required_c)
+    wide_infinity = T.cast(wide_infinity,'float64');
+
+    name = bc01.name
+    if name is None:
+        name = 'anon_bc01'
+    bc01 = T.set_subtensor(wide_infinity[:, :, 0:r, 0:c], bc01)
+    bc01.name = 'infinite_padded_' + name
+
+    for row_within_pool in xrange(pool_shape[0]):
+        row_stop = last_pool_r + row_within_pool + 1
+        for col_within_pool in xrange(pool_shape[1]):
+            col_stop = last_pool_c + col_within_pool + 1
+            cur = bc01[:,
+                       :,
+                       row_within_pool:row_stop:rs,
+                       col_within_pool:col_stop:cs]
+            cur.name = ('sum_pool_cur_' + bc01.name + '_' +
+                        str(row_within_pool) + '_' + str(col_within_pool))
+            if mx is None:
+                mx = cur
+            else:
+                mx = mx + cur
+                mx.name = ('sum_pool_mx_' + bc01.name + '_' +
+                           str(row_within_pool) + '_' + str(col_within_pool))
+
+    mx.name = 'sum_pool(' + name + ')'
+
+    for mxv in get_debug_values(mx):
+        assert isfinite(mxv)
+
+    return mx
+
 
 
 def mean_pool(bc01, pool_shape, pool_stride, image_shape):
@@ -3724,7 +3847,7 @@ def mean_pool(bc01, pool_shape, pool_stride, image_shape):
         assert bc01v.shape[2] == image_shape[0]
         assert bc01v.shape[3] == image_shape[1]
 
-    wide_infinity = T.alloc(-np.inf,
+    wide_infinity = T.alloc(0,
                             bc01.shape[0],
                             bc01.shape[1],
                             required_r,
