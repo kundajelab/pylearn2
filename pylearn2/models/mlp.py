@@ -3852,6 +3852,7 @@ def mean_pool(bc01, pool_shape, pool_stride, image_shape):
                             bc01.shape[1],
                             required_r,
                             required_c)
+    wide_infinity = T.cast(wide_infinity,'float64');
 
     name = bc01.name
     if name is None:
