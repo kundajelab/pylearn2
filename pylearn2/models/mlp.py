@@ -3454,6 +3454,59 @@ class ConvRectifiedLinear(ConvElemwise):
                                                   monitor_style=monitor_style,
                                                   init_weights=init_weights)
 
+class ConvSigmoid(ConvElemwise):
+
+    def __init__(self,
+                 output_channels,
+                 kernel_shape,
+                 pool_shape,
+                 pool_stride,
+                 layer_name,
+                 irange=None,
+                 border_mode='valid',
+                 sparse_init=None,
+                 include_prob=1.0,
+                 init_bias=0.,
+                 W_lr_scale=None,
+                 b_lr_scale=None,
+                 max_kernel_norm=None,
+                 pool_type='max',
+                 tied_b=False,
+                 detector_normalization=None,
+                 output_normalization=None,
+                 kernel_stride=(1, 1),
+                 monitor_style="classification",
+                 init_weights=None):
+
+        nonlinearity = SigmoidConvNonlinearity()
+
+        # Alias the variables for pep8
+        mkn = max_kernel_norm
+        dn = detector_normalization
+        on = output_normalization
+
+        super(ConvRectifiedLinear, self).__init__(output_channels,
+                                                  kernel_shape,
+                                                  layer_name,
+                                                  nonlinearity,
+                                                  irange=irange,
+                                                  border_mode=border_mode,
+                                                  sparse_init=sparse_init,
+                                                  include_prob=include_prob,
+                                                  init_bias=init_bias,
+                                                  W_lr_scale=W_lr_scale,
+                                                  b_lr_scale=b_lr_scale,
+                                                  pool_shape=pool_shape,
+                                                  pool_stride=pool_stride,
+                                                  max_kernel_norm=mkn,
+                                                  pool_type=pool_type,
+                                                  tied_b=tied_b,
+                                                  detector_normalization=dn,
+                                                  output_normalization=on,
+                                                  kernel_stride=kernel_stride,
+                                                  monitor_style=monitor_style,
+                                                  init_weights=init_weights)
+
 
 def max_pool(bc01, pool_shape, pool_stride, image_shape):
     """
@@ -3623,7 +3676,6 @@ def max_pool_c01b(c01b, pool_shape, pool_stride, image_shape):
                             required_r,
                             required_c,
                             c01b.shape[3])
-    wide_infinity = T.cast(wide_infinity,'float64');
     name = c01b.name
     if name is None:
         name = 'anon_bc01'
@@ -3864,8 +3916,9 @@ def mean_pool(bc01, pool_shape, pool_stride, image_shape):
     # each position
     wide_infinity_count = T.alloc(0, bc01.shape[0], bc01.shape[1], required_r,
                                   required_c)
+    wide_infinity = T.cast(wide_infinity,'float64');
     bc01_count = T.set_subtensor(wide_infinity_count[:, :, 0:r, 0:c], 1)
-
+    bc01_count = T.cast(bc01_count,'float64');
     for row_within_pool in xrange(pool_shape[0]):
         row_stop = last_pool_r + row_within_pool + 1
         for col_within_pool in xrange(pool_shape[1]):
