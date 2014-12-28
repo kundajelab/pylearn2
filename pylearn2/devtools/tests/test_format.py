@@ -91,7 +91,6 @@ whitelist_pep8 = [
     "costs/ebm_estimation.py",
     "costs/gsn.py",
     "costs/mlp/missing_target_cost.py",
-    "costs/autoencoder.py",
     "linear/conv2d.py",
     "linear/local_c01b.py",
     "linear/linear_transform.py",
@@ -122,7 +121,6 @@ whitelist_pep8 = [
     "scripts/datasets/make_stl10_patches.py",
     "scripts/gsn_example.py",
     "scripts/tutorials/deep_trainer/run_deep_trainer.py",
-    "scripts/tutorials/grbm_smd/make_dataset.py",
     "scripts/tutorials/grbm_smd/test_grbm_smd.py",
     "scripts/icml_2013_wrepl/multimodal/"
     "extract_layer_2_kmeans_features.py",
