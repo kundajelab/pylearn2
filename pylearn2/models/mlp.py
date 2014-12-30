@@ -2829,7 +2829,6 @@ class TanhConvNonlinearity(ConvNonlinearity):
         return p
 
 class PoolingLayer(Layer):
-
     """
     Generic pooling layer.
     Takes a particular pooling function as an argument.
@@ -2840,101 +2839,24 @@ class PoolingLayer(Layer):
         A name for this layer that will be prepended to monitoring channels
         related to this layer.
     pooling_func : function
-        The function that performs the pooling. Eg: sum_all
+        Function that accepts an an argument bc01 that is a theano variable
+        and returns a theano variable representing the pooled output. Eg: sum_all
     """
 
     def __init__(self,
                  pooling_func):
-        super(ConvElemwise, self).__init__()
-
+        super(PoolingLayer, self).__init__()
         self.__dict__.update(locals())
         del self.self
 
-    ##TODO: complete!
-
     def initialize_transformer(self, rng):
-        """
-        This function initializes the transformer of the class. Re-running
-        this function will reset the transformer.
-
-        Parameters
-        ----------
-        rng : object
-            random number generator object.
-        """
-        if self.irange is not None:
-            assert self.sparse_init is None
-            self.transformer = conv2d.make_random_conv2D(
-                irange=self.irange,
-                input_space=self.input_space,
-                output_space=self.detector_space,
-                kernel_shape=self.kernel_shape,
-                subsample=self.kernel_stride,
-                border_mode=self.border_mode,
-                rng=rng)
-        elif self.sparse_init is not None:
-            self.transformer = conv2d.make_sparse_random_conv2D(
-                num_nonzero=self.sparse_init,
-                input_space=self.input_space,
-                output_space=self.detector_space,
-                kernel_shape=self.kernel_shape,
-                subsample=self.kernel_stride,
-                border_mode=self.border_mode,
-                rng=rng)
-        elif self.init_weights is not None:
-            self.transformer = conv2d.make_conv2D_with_weights(
-                init_weights=self.init_weights
-                ,input_space=self.input_space
-                ,output_space=self.detector_space
-                ,subsample=self.kernel_stride
-                ,border_mode=self.border_mode)    
-        else:
-            raise AssertionError("Conditions for initialisation"
-                "of ConvElemWise were not satisfied"); 
+        pass;
 
     def initialize_output_space(self):
-        """
-        Initializes the output space of the ConvElemwise layer by taking
-        pooling operator and the hyperparameters of the convolutional layer
-        into consideration as well.
-        """
-        dummy_batch_size = self.mlp.batch_size
-
-        if dummy_batch_size is None:
-            dummy_batch_size = 2
-        dummy_detector =\
-            sharedX(self.detector_space.get_origin_batch(dummy_batch_size))
-
-        if self.pool_type is not None:
-            if self.pool_type == 'max':
-                dummy_p = max_pool(bc01=dummy_detector,
-                                   pool_shape=self.pool_shape,
-                                   pool_stride=self.pool_stride,
-                                   image_shape=self.detector_space.shape)
-            elif self.pool_type == 'mean':
-                dummy_p = mean_pool(bc01=dummy_detector,
-                                    pool_shape=self.pool_shape,
-                                    pool_stride=self.pool_stride,
-                                    image_shape=self.detector_space.shape)
-            elif self.pool_type == 'sum':
-                dummy_p = sum_pool(bc01=dummy_detector,
-                                    pool_shape=self.pool_shape,
-                                    pool_stride=self.pool_stride,
-                                    image_shape=self.detector_space.shape)
-            else:
-                raise RuntimeError("Unsupported pool type: "+self.pool_type);
-            dummy_p = dummy_p.eval()
-            self.output_space = Conv2DSpace(shape=[dummy_p.shape[2],
-                                                   dummy_p.shape[3]],
+        self.output_space = Conv2DSpace(shape=[dummy_p.shape[2],
+                                            dummy_p.shape[3]],
                                             num_channels=self.output_channels,
                                             axes=('b', 'c', 0, 1))
-        else:
-            dummy_detector = dummy_detector.eval()
-            self.output_space = Conv2DSpace(shape=[dummy_detector.shape[2],
-                                            dummy_detector.shape[3]],
-                                            num_channels=self.output_channels,
-                                            axes=('b', 'c', 0, 1))
-
         logger.info('Output space: {0}'.format(self.output_space.shape))
 
     @wraps(Layer.set_input_space)
@@ -2942,260 +2864,61 @@ class PoolingLayer(Layer):
         """ Note: this function will reset the parameters! """
 
         self.input_space = space
-
-        if not isinstance(space, Conv2DSpace):
-            raise BadInputSpaceError(self.__class__.__name__ +
-                                     ".set_input_space "
-                                     "expected a Conv2DSpace, got " +
-                                     str(space) + " of type " +
-                                     str(type(space)))
-
-        rng = self.mlp.rng
-
-        if self.border_mode == 'valid':
-            output_shape = [int((self.input_space.shape[0]
-                                 - self.kernel_shape[0])
-                                / self.kernel_stride[0]) + 1,
-                            int((self.input_space.shape[1]
-                                 - self.kernel_shape[1])
-                                / self.kernel_stride[1]) + 1]
-        elif self.border_mode == 'full':
-            output_shape = [int((self.input_space.shape[0]
-                                 + self.kernel_shape[0])
-                                / self.kernel_stride[0]) - 1,
-                            int((self.input_space.shape[1]
-                                 + self.kernel_shape[1])
-                                / self.kernel_stride[1]) - 1]
-
-        self.detector_space = Conv2DSpace(shape=output_shape,
-                                          num_channels=self.output_channels,
-                                          axes=('b', 'c', 0, 1))
-
-        self.initialize_transformer(rng)
-
-        W, = self.transformer.get_params()
-        W.name = self.layer_name + '_W'
-
-        if self.tied_b:
-            self.b = sharedX(np.zeros((self.detector_space.num_channels)) +
-                             self.init_bias)
-        else:
-            self.b = sharedX(self.detector_space.get_origin() + self.init_bias)
-
-        self.b.name = self.layer_name + '_b'
-
-        logger.info('Input shape: {0}'.format(self.input_space.shape))
-        logger.info('Detector space: {0}'.format(self.detector_space.shape))
-
         self.initialize_output_space()
 
     @wraps(Layer._modify_updates)
     def _modify_updates(self, updates):
-        if self.max_kernel_norm is not None:
-            W, = self.transformer.get_params()
-            if W in updates:
-                updated_W = updates[W]
-                row_norms = T.sqrt(T.sum(T.sqr(updated_W), axis=(1, 2, 3)))
-                desired_norms = T.clip(row_norms, 0, self.max_kernel_norm)
-                updates[W] = updated_W * (
-                    desired_norms /
-                    (1e-7 + row_norms)).dimshuffle(0, 'x', 'x', 'x')
+        pass;
 
     @wraps(Layer.get_params)
     def get_params(self):
-        assert self.b.name is not None
-        W, = self.transformer.get_params()
-        assert W.name is not None
-        rval = self.transformer.get_params()
-        assert not isinstance(rval, set)
-        rval = list(rval)
-        assert self.b not in rval
-        rval.append(self.b)
-        return rval
+        return []
 
     @wraps(Layer.get_weight_decay)
     def get_weight_decay(self, coeff):
-
-        if isinstance(coeff, str):
-            coeff = float(coeff)
-        assert isinstance(coeff, float) or hasattr(coeff, 'dtype')
-        W, = self.transformer.get_params()
-        return coeff * T.sqr(W).sum()
+        pass;
 
     @wraps(Layer.get_l1_weight_decay)
     def get_l1_weight_decay(self, coeff):
-
-        if isinstance(coeff, str):
-            coeff = float(coeff)
-        assert isinstance(coeff, float) or hasattr(coeff, 'dtype')
-        W, = self.transformer.get_params()
-        return coeff * abs(W).sum()
+        pass;
 
     @wraps(Layer.set_weights)
     def set_weights(self, weights):
-
-        W, = self.transformer.get_params()
-        W.set_value(weights)
+        pass;
 
     @wraps(Layer.set_biases)
     def set_biases(self, biases):
-
-        self.b.set_value(biases)
+        pass;
 
     @wraps(Layer.get_biases)
     def get_biases(self):
-
-        return self.b.get_value()
-
-    @wraps(Layer.get_weights_format)
-    def get_weights_format(self):
-
-        return ('v', 'h')
-
-    @wraps(Layer.get_lr_scalers)
-    def get_lr_scalers(self):
-        if not hasattr(self, 'W_lr_scale'):
-            self.W_lr_scale = None
-
-        if not hasattr(self, 'b_lr_scale'):
-            self.b_lr_scale = None
-
-        rval = OrderedDict()
-
-        if self.W_lr_scale is not None:
-            W, = self.transformer.get_params()
-            rval[W] = self.W_lr_scale
-
-        if self.b_lr_scale is not None:
-            rval[self.b] = self.b_lr_scale
-
-        return rval
-
-    @wraps(Layer.get_weights_topo)
-    def get_weights_topo(self):
-
-        outp, inp, rows, cols = range(4)
-        raw = self.transformer._filters.get_value()
-
-        return np.transpose(raw, (outp, rows, cols, inp))
+        return [];
 
     @wraps(Layer.get_layer_monitoring_channels)
     def get_layer_monitoring_channels(self, state_below=None,
                                       state=None, targets=None):
-
-        W, = self.transformer.get_params()
-
-        assert W.ndim == 4
-
-        sq_W = T.sqr(W)
-
-        row_norms = T.sqrt(sq_W.sum(axis=(1, 2, 3)))
-
-        rval = OrderedDict([
-                           ('kernel_norms_min', row_norms.min()),
-                           ('kernel_norms_mean', row_norms.mean()),
-                           ('kernel_norms_max', row_norms.max()),
-                           ])
-
-        cst = self.cost
-        orval = self.nonlin.get_monitoring_channels_from_state(state,
-                                                               targets,
-                                                               cost_fn=cst)
-
-        rval.update(orval)
-
-        return rval
+        return OrderedDict();
 
     @wraps(Layer.fprop)
     def fprop(self, state_below):
-
         self.input_space.validate(state_below)
-
-        z = self.transformer.lmul(state_below)
-        if not hasattr(self, 'tied_b'):
-            self.tied_b = False
-
-        if self.tied_b:
-            b = self.b.dimshuffle('x', 0, 'x', 'x')
-        else:
-            b = self.b.dimshuffle('x', 0, 1, 2)
-
-        z = z + b
-        d = self.nonlin.apply(z)
-
-        if self.layer_name is not None:
-            d.name = self.layer_name + '_z'
-            self.detector_space.validate(d)
-
-        if self.pool_type is not None:
-            if not hasattr(self, 'detector_normalization'):
-                self.detector_normalization = None
-
-            if self.detector_normalization:
-                d = self.detector_normalization(d)
-
-            if self.pool_type == 'max':
-                p = max_pool(bc01=d, pool_shape=self.pool_shape,
-                             pool_stride=self.pool_stride,
-                             image_shape=self.detector_space.shape)
-            elif self.pool_type == 'mean':
-                p = mean_pool(bc01=d, pool_shape=self.pool_shape,
-                              pool_stride=self.pool_stride,
-                              image_shape=self.detector_space.shape)
-            elif self.pool_type == 'sum':
-                p = sum_pool(bc01=d, pool_shape=self.pool_shape, 
-                              pool_stride=self.pool_stride, 
-                              image_shape=self.detector_space.shape) 
-            else:
-                raise RuntimeError("Unsupported pool type: "+self.pool_type);
-
-            self.output_space.validate(p)
-        else:
-            p = d
-
+        p = pooling_func(bc01=d);
+        self.output_space.validate(p)
         if not hasattr(self, 'output_normalization'):
             self.output_normalization = None
-
         if self.output_normalization:
             p = self.output_normalization(p)
-
         return p
 
     def cost(self, Y, Y_hat):
-        """
-        Cost for convnets is hardcoded to be the cost for sigmoids.
-        TODO: move the cost into the non-linearity class.
+        raise NotImplementedError("Augh what why are you calling this help");
 
-        Parameters
-        ----------
-        Y : theano.gof.Variable
-            Output of `fprop`
-        Y_hat : theano.gof.Variable
-            Targets
-
-        Returns
-        -------
-        cost : theano.gof.Variable
-            0-D tensor describing the cost
-
-        Notes
-        -----
-        Cost mean across units, mean across batch of KL divergence
-        KL(P || Q) where P is defined by Y and Q is defined by Y_hat
-        KL(P || Q) = p log p - p log q + (1-p) log (1-p) - (1-p) log (1-q)
-        """
-        assert self.nonlin.non_lin_name == "sigmoid", ("ConvElemwise "
-                                                       "supports "
-                                                       "cost function "
-                                                       "for only "
-                                                       "sigmoid layer "
-                                                       "for now.")
-        batch_axis = self.output_space.get_batch_axis()
-        ave_total = kl(Y=Y, Y_hat=Y_hat, batch_axis=batch_axis)
-        ave = ave_total.mean()
-        return ave
-
-
+class SummationLayer(PoolingLayer):
+    """
+    Layer that just sums up the previous layer on a channel by channel basis
+    """
+    def __init__(self):
+        super(SummationLayer, self).__init__(sum_all);
 
 class ConvElemwise(Layer):
 
