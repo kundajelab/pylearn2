@@ -2844,6 +2844,7 @@ class PoolingLayer(Layer):
     """
 
     def __init__(self,
+                 layer_name,
                  pooling_func):
         super(PoolingLayer, self).__init__()
         self.__dict__.update(locals())
@@ -2853,10 +2854,13 @@ class PoolingLayer(Layer):
         pass;
 
     def initialize_output_space(self):
-        self.output_space = Conv2DSpace(shape=[dummy_p.shape[2],
-                                            dummy_p.shape[3]],
-                                            num_channels=self.output_channels,
-                                            axes=('b', 'c', 0, 1))
+        dummy_input =\
+            sharedX(self.input_space.get_origin_batch(10))
+        dummy_p = self.pooling_func(bc01=dummy_input)
+        dummy_p = dummy_p.eval();
+        self.output_space = Conv2DSpace(shape=[dummy_p.shape[2],dummy_p.shape[3]]
+                                        ,num_channels=dummy_p.shape[1]
+                                        ,axes=('b', 'c', 0, 1))
         logger.info('Output space: {0}'.format(self.output_space.shape))
 
     @wraps(Layer.set_input_space)
@@ -2902,7 +2906,7 @@ class PoolingLayer(Layer):
     @wraps(Layer.fprop)
     def fprop(self, state_below):
         self.input_space.validate(state_below)
-        p = pooling_func(bc01=d);
+        p = self.pooling_func(bc01=state_below);
         self.output_space.validate(p)
         if not hasattr(self, 'output_normalization'):
             self.output_normalization = None
@@ -2913,12 +2917,12 @@ class PoolingLayer(Layer):
     def cost(self, Y, Y_hat):
         raise NotImplementedError("Augh what why are you calling this help");
 
-class SummationLayer(PoolingLayer):
+class SumAll(PoolingLayer):
     """
     Layer that just sums up the previous layer on a channel by channel basis
     """
-    def __init__(self):
-        super(SummationLayer, self).__init__(sum_all);
+    def __init__(self,layer_name):
+        super(SumAll, self).__init__(layer_name, sum_all);
 
 class ConvElemwise(Layer):
 
@@ -3349,7 +3353,7 @@ class ConvElemwise(Layer):
                              pool_stride=self.pool_stride,
                              image_shape=self.detector_space.shape)
             elif self.pool_type == 'mean':
-                p = mean_pool(bc01=d, pool_shape=self.pool_shape,
+               p = mean_pool(bc01=d, pool_shape=self.pool_shape,
                               pool_stride=self.pool_stride,
                               image_shape=self.detector_space.shape)
             elif self.pool_type == 'sum':
