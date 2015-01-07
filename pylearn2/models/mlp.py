@@ -1809,6 +1809,22 @@ class SoftmaxPool(Layer):
 
         return p
 
+def mutuallyExclusiveInitsCheck(mutuallyExclusiveInits):
+        #make sure only one is set
+        for i,initVal1 in enumerate(mutuallyExclusiveInits[:len(mutuallyExclusiveInits)-1]):
+            for j,initVal2 in enumerate(mutuallyExclusiveInits[i+1:]):
+                if initVal1[1] is not None and initVal2[1] is not None:
+                    raise ValueError("Only one of "+initVal1[0]+" and "+initVal2[0]+" can"
+                                    +" be specified; currently are "+str(initVal1[1])+" and"
+                                    +" "+str(initVal2[1]));
+        #make sure at least one is set
+        somethingSet = False;
+        for initVal in mutuallyExclusiveInits:
+            if initVal[1] is not None:
+                somethingSet = True;
+        if (not somethingSet):
+            raise ValueError("At least one of "+(" "+join([x[0] for x in mutuallyExclusiveInits]))
+                                +" should be set");
 
 class Linear(Layer):
 
@@ -1877,6 +1893,7 @@ class Linear(Layer):
         median of the data.
     use_bias : bool, optional
         If False, does not add the bias term to the output.
+    W_init : np array of weights to initialise with if pre-initing.
     """
 
     def __init__(self,
@@ -1896,27 +1913,42 @@ class Linear(Layer):
                  min_col_norm=None,
                  copy_input=None,
                  use_abs_loss=False,
-                 use_bias=True):
-
+                 use_bias=True,
+                 W_init=None,
+                 b_init_arr=None):
+        
         if copy_input is not None:
             raise AssertionError(
                 "The copy_input option had a bug and has "
                 "been removed from the library.")
-
+        
+        mutuallyExclusiveInitsCheck([('irange', irange)
+                                    ,('istdev', istdev)
+                                    ,('sparse_init',sparse_init)
+                                    ,('W_init',W_init) ]);    
+        if use_bias:
+            if (init_bias == 0 and b_init_arr is not None):
+                init_bias = None; #doing this for back compat
+            mutuallyExclusiveInitsCheck([('init_bias', init_bias)
+                                        ,('b_init_arr', b_init_arr)]);    
+    
         super(Linear, self).__init__()
 
-        if use_bias and init_bias is None:
-            init_bias = 0.
 
         self.__dict__.update(locals())
         del self.self
 
-        if use_bias:
-            self.b = sharedX(np.zeros((self.dim,)) + init_bias,
-                             name=(layer_name + '_b'))
+        if use_bias: 
+            if b_init_arr is not None:
+                bInitArr_temp = b_init_arr
+            elif (init_bias is not None):
+                bInitArr_temp = np.zeros((self.dim,)) + init_bias
+            self.b = sharedX(bInitArr_temp,
+                             name=(layer_name + '_b')) 
         else:
             assert b_lr_scale is None
-            init_bias is None
+            assert init_bias is None
+            assert b_init_arr is None
 
     @wraps(Layer.get_lr_scalers)
     def get_lr_scalers(self):
@@ -1965,8 +1997,7 @@ class Linear(Layer):
         elif self.istdev is not None:
             assert self.sparse_init is None
             W = rng.randn(self.input_dim, self.dim) * self.istdev
-        else:
-            assert self.sparse_init is not None
+        elif self.sparse_init is not None:
             W = np.zeros((self.input_dim, self.dim))
 
             def mask_rejects(idx, i):
@@ -1982,6 +2013,10 @@ class Linear(Layer):
                         idx = rng.randint(0, self.input_dim)
                     W[idx, i] = rng.randn()
             W *= self.sparse_stdev
+        elif self.W_init is not None:
+            W = self.W_init;
+        else:
+            raise RuntimeError("All the initialisation options were none...");
 
         W = sharedX(W)
         W.name = self.layer_name + '_W'
