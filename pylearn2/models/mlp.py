@@ -1894,6 +1894,7 @@ class Linear(Layer):
     use_bias : bool, optional
         If False, does not add the bias term to the output.
     W_init : np array of weights to initialise with if pre-initing.
+    b_init_arr : np array of weights to initialise with if pre-initing.
     """
 
     def __init__(self,
