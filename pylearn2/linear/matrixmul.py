@@ -19,6 +19,46 @@ import numpy as np
 from pylearn2.utils import sharedX
 from pylearn2.utils.rng import make_np_rng
 
+class DotProduct(LinearTransform):
+    """
+        For the DFS
+    """
+
+    def __init__(self, W):
+        """
+        Sets the initial values of the vector
+        W is 1-d
+        """
+        self._W = W
+
+    @functools.wraps(LinearTransform.get_params)
+    def get_params(self):
+        """
+        .. todo::
+
+            WRITEME
+        """
+        return [self._W]
+
+    def lmul(self, x):
+        """
+        .. todo::
+
+            WRITEME
+
+        Parameters
+        ----------
+        x : ndarray, 1d or 2d
+            The input data
+        """
+
+        return x*self._W #element-wise multiplication
+
+    #def lmul_T(self, x):
+    #    """
+    #    Aaah! When is this used??
+    #    """
+    #    return T.dot(x, self._W.T)
 
 class MatrixMul(LinearTransform):
     """

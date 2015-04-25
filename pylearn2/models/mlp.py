@@ -26,7 +26,7 @@ from pylearn2.compat import OrderedDict
 from pylearn2.costs.mlp import Default
 from pylearn2.expr.probabilistic_max_pooling import max_pool_channels
 from pylearn2.linear import conv2d
-from pylearn2.linear.matrixmul import MatrixMul
+from pylearn2.linear.matrixmul import MatrixMul, DotProduct
 from pylearn2.model_extensions.norm_constraint import MaxL2FilterNorm
 from pylearn2.models.model import Model
 from pylearn2.monitor import get_monitor_doc
@@ -1825,6 +1825,134 @@ def mutuallyExclusiveInitsCheck(mutuallyExclusiveInits):
         if (not somethingSet):
             raise ValueError("At least one of "+(" "+join([x[0] for x in mutuallyExclusiveInits]))
                                 +" should be set");
+
+
+class DFS(Layer):
+    def __init__(self,
+                 layer_name):
+        
+    @wraps(Layer.set_input_space)
+    def set_input_space(self, space):
+
+        self.input_space = space
+
+        if isinstance(space, VectorSpace):
+            self.requires_reformat = False
+            self.input_dim = space.dim
+        else:
+            self.requires_reformat = True
+            self.input_dim = space.get_total_dimension()
+            self.desired_space = VectorSpace(self.input_dim)
+
+        self.output_space = VectorSpace(self.input_dim)
+        W = np.zeros(self.input_dim);
+        W = sharedX(W)
+        W.name = self.layer_name + '_W'
+
+        self.transformer = DotProduct(W)
+
+        W, = self.transformer.get_params()
+        assert W.name is not None
+
+    @wraps(Layer._modify_updates)
+    def _modify_updates(self, updates):
+        pass;
+
+    @wraps(Layer.get_params)
+    def get_params(self):
+
+        W, = self.transformer.get_params()
+        assert W.name is not None
+        rval = self.transformer.get_params()
+        assert not isinstance(rval, set)
+        rval = list(rval)
+        return rval
+
+    @wraps(Layer.get_weight_decay)
+    def get_weight_decay(self, coeff):
+        if isinstance(coeff, str):
+            coeff = float(coeff)
+        assert isinstance(coeff, float) or hasattr(coeff, 'dtype')
+        W, = self.transformer.get_params()
+        return coeff * T.sqr(W).sum()
+
+    @wraps(Layer.get_l1_weight_decay)
+    def get_l1_weight_decay(self, coeff):
+        if isinstance(coeff, str):
+            coeff = float(coeff)
+        assert isinstance(coeff, float) or hasattr(coeff, 'dtype')
+        W, = self.transformer.get_params()
+        return coeff * abs(W).sum()
+
+    @wraps(Layer.get_weights)
+    def get_weights(self):
+        W, = self.transformer.get_params()
+        W = W.get_value()
+
+        return W
+
+    @wraps(Layer.set_weights)
+    def set_weights(self, weights):
+        W, = self.transformer.get_params()
+        W.set_value(weights)
+
+    #@wraps(Layer.get_weights_format)
+    #def get_weights_format(self):
+    # aah! where is this used?? - oh see documentation in model class
+    #    return ('v', 'h')
+
+    #@wraps(Layer.get_weights_topo)
+    #def get_weights_topo(self):
+    #
+    #    if not isinstance(self.input_space, Conv2DSpace):
+    #        raise NotImplementedError()
+    #
+    #    W, = self.transformer.get_params()
+    #
+    #    W = W.T
+    #
+    #    W = W.reshape((self.dim, self.input_space.shape[0],
+    #                   self.input_space.shape[1],
+    #                   self.input_space.num_channels))
+    #
+    #    W = Conv2DSpace.convert(W, self.input_space.axes, ('b', 0, 1, 'c'))
+    #
+    #    return function([], W)()
+
+    @wraps(Layer.get_layer_monitoring_channels)
+    def get_layer_monitoring_channels(self, state_below=None,
+                                      state=None, targets=None):
+        W, = self.transformer.get_params()
+        assert W.ndim == 1
+        rval = OrderedDict([('nonzeroWs',  (W==0).sum())])
+        return rval
+
+    def _linear_part(self, state_below):
+        """
+        Parameters
+        ----------
+        state_below : member of input_space
+
+        Returns
+        -------
+        output : theano matrix
+            Affine transformation of state_below
+        """
+        self.input_space.validate(state_below)
+
+        if self.requires_reformat:
+            state_below = self.input_space.format_as(state_below,
+                                                     self.desired_space)
+
+        z = self.transformer.lmul(state_below)
+        if self.layer_name is not None:
+            z.name = self.layer_name + '_z'
+        return z
+
+    @wraps(Layer.fprop)
+    def fprop(self, state_below):
+        p = self._linear_part(state_below)
+        return p
 
 class Linear(Layer):
 
