@@ -50,6 +50,9 @@ class Cost(object):
     # (X, Y) pair, and Y cannot be None.
     supervised = False
 
+    def getCostFunctionThatTakesYhatAndY():
+        raise NotImplementedError();
+
     def expr(self, model, data, ** kwargs):
         """
         Returns a theano expression for the cost function.

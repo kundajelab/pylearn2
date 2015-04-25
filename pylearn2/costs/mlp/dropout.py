@@ -56,12 +56,14 @@ class Dropout(DefaultDataSpecsMixin, Cost):
     per_example : bool
         If True, chooses separate units to drop for each example. If False,
         applies the same dropout mask to the entire minibatch.
+    costGivenYhatAndY : function
+        Takes as input Yhat and Y, returns the cost expression.
     """
 
     supervised = True
 
     def __init__(self, default_input_include_prob=.5, input_include_probs=None,
-                 default_input_scale=2., input_scales=None, per_example=True):
+                 default_input_scale=2., input_scales=None, per_example=True, costGivenYhatAndY=None):
 
         if input_include_probs is None:
             input_include_probs = {}
@@ -94,7 +96,11 @@ class Dropout(DefaultDataSpecsMixin, Cost):
             input_scales=self.input_scales,
             per_example=self.per_example
         )
-        return model.cost(Y, Y_hat)
+        if self.costGivenYhatAndY is None:
+            return model.cost(Y, Y_hat)
+        else:
+            sys.exit(1);
+            return self.costGivenYhatAndY(Y_hat, Y);
 
     @wraps(Cost.is_stochastic)
     def is_stochastic(self):
