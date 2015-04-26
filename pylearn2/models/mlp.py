@@ -1828,9 +1828,10 @@ def mutuallyExclusiveInitsCheck(mutuallyExclusiveInits):
 
 
 class DFS(Layer):
-    def __init__(self,
-                 layer_name):
-        
+    def __init__(self, layer_name):
+        self.layer_name = layer_name;
+        super(DFS, self).__init__()
+    
     @wraps(Layer.set_input_space)
     def set_input_space(self, space):
 
@@ -1924,7 +1925,7 @@ class DFS(Layer):
                                       state=None, targets=None):
         W, = self.transformer.get_params()
         assert W.ndim == 1
-        rval = OrderedDict([('nonzeroWs',  (W==0).sum())])
+        rval = OrderedDict([('nonzeroWs',  T.cast(T.gt(W,0).sum(),config.floatX))])
         return rval
 
     def _linear_part(self, state_below):
