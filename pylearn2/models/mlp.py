@@ -1846,7 +1846,7 @@ class DFS(Layer):
             self.desired_space = VectorSpace(self.input_dim)
 
         self.output_space = VectorSpace(self.input_dim)
-        W = np.zeros(self.input_dim);
+        W = np.ones(self.input_dim);
         W = sharedX(W)
         W.name = self.layer_name + '_W'
 
