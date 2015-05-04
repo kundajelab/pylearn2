@@ -3089,6 +3089,13 @@ class SumAll(PoolingLayer):
     def __init__(self,layer_name):
         super(SumAll, self).__init__(layer_name, sum_all);
 
+class AverageAll(PoolingLayer):
+    """
+    Layer that averages all of the previous layer on a channel by channel basis
+    """
+    def __init__(self,layer_name):
+        super(AverageAll, self).__init__(layer_name, sum_all);
+
 class ConvElemwise(Layer):
 
     """
@@ -4094,6 +4101,23 @@ def sum_all(bc01):
     theSum = T.sum(bc01, (2,3), config.floatX, keepdims=True)
     return theSum
 
+def pool_all(bc01):
+    """
+    Does summation of all channels.
+
+    Parameters
+    ----------
+    bc01 : theano tensor
+        minibatch in format (batch size, channels, rows, cols)
+
+    Returns
+    -------
+    pooled : theano tensor
+        The output of pooling applied to `bc01`
+    """
+    
+    theMean = T.mean(bc01, (2,3), config.floatX, keepdims=True)
+    return theMean
 
 def mean_pool(bc01, pool_shape, pool_stride, image_shape):
     """

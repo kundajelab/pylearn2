@@ -10,6 +10,7 @@
 # This is also a common use case because often you will want to preprocess
 # your data once and then train several models on the preprocessed data.
 
+import sys;
 import os.path
 import pylearn2
 
