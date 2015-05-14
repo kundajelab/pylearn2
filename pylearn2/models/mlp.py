@@ -3021,7 +3021,7 @@ class PoolingLayer(Layer):
     def initialize_output_space(self):
         dummy_input =\
             sharedX(self.input_space.get_origin_batch(10))
-        dummy_p = self.pooling_func(bc01=dummy_input)
+        dummy_p = self.pooling_func(bc01=dummy_input, input_shape=self.input_space.shape)
         dummy_p = dummy_p.eval();
         self.output_space = Conv2DSpace(shape=[dummy_p.shape[2],dummy_p.shape[3]]
                                         ,num_channels=dummy_p.shape[1]
@@ -3071,7 +3071,7 @@ class PoolingLayer(Layer):
     @wraps(Layer.fprop)
     def fprop(self, state_below):
         self.input_space.validate(state_below)
-        p = self.pooling_func(bc01=state_below);
+        p = self.pooling_func(bc01=state_below, input_shape=self.input_space.shape);
         self.output_space.validate(p)
         if not hasattr(self, 'output_normalization'):
             self.output_normalization = None
@@ -3094,7 +3094,14 @@ class AverageAll(PoolingLayer):
     Layer that averages all of the previous layer on a channel by channel basis
     """
     def __init__(self,layer_name):
-        super(AverageAll, self).__init__(layer_name, sum_all);
+        super(AverageAll, self).__init__(layer_name, average_all);
+
+class MaxAll(PoolingLayer):
+    """
+    Layer that averages all of the previous layer on a channel by channel basis
+    """
+    def __init__(self,layer_name):
+        super(MaxAll, self).__init__(layer_name, max_all);
 
 class ConvElemwise(Layer):
 
@@ -4083,7 +4090,7 @@ def sum_pool(bc01, pool_shape, pool_stride, image_shape):
 
     return mx
 
-def sum_all(bc01):
+def sum_all(bc01, input_shape):
     """
     Does summation of all channels.
 
@@ -4101,7 +4108,7 @@ def sum_all(bc01):
     theSum = T.sum(bc01, (2,3), config.floatX, keepdims=True)
     return theSum
 
-def pool_all(bc01):
+def average_all(bc01, input_shape):
     """
     Does summation of all channels.
 
@@ -4118,6 +4125,60 @@ def pool_all(bc01):
     
     theMean = T.mean(bc01, (2,3), config.floatX, keepdims=True)
     return theMean
+
+def max_all(bc01, input_shape):
+    """
+    Does max.
+
+    Parameters
+    ----------
+    bc01 : theano tensor
+        minibatch in format (batch size, channels, rows, cols)
+
+    Returns
+    -------
+    pooled : theano tensor
+        The output of pooling applied to `bc01`
+    """
+    
+    name = bc01.name
+    if name is None:
+        name = 'anon_bc01'
+    bc01.name = name;   
+ 
+    mx = None
+    r, c = input_shape[0], input_shape[1]
+    for row_within_pool in xrange(r):
+        for col_within_pool in xrange(c):
+            cur = bc01[:,
+                       :,
+                       row_within_pool:row_within_pool+1,
+                       col_within_pool:col_within_pool+1]
+            cur.name = ('max_pool_cur_' + bc01.name + '_' +
+                        str(row_within_pool) + '_' + str(col_within_pool))
+            if mx is None:
+                mx = cur
+            else:
+                mx = T.maximum(mx, cur)
+                mx.name = ('max_pool_mx_' + bc01.name + '_' +
+                           str(row_within_pool) + '_' + str(col_within_pool))
+
+    mx.name = 'max_pool(' + name + ')'
+
+    for mxv in get_debug_values(mx):
+        assert isfinite(mxv)
+
+    return mx
+
+
+
+
+
+
+
+
+
+
 
 def mean_pool(bc01, pool_shape, pool_stride, image_shape):
     """
